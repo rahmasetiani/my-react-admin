@@ -1,6 +1,34 @@
+@import "tailwindcss";
 html, body, #root {
   margin: 0;
   padding: 0;
   height: 100%;
   overflow: hidden; /* hilang scroll */
+}
+/* Pastikan halaman bisa scroll normal */
+html, body {
+  min-height: 100%;
+  height: auto;
+  overflow-y: auto;
+}
+
+/* Hanya kunci scroll kalau drawer/modal sengaja buka */
+body.drawer-open {
+  overflow: hidden;
+}
+
+/* Root tidak memaksa 100vh yang mengunci scroll */
+#root, #app {
+  min-height: 100%;
+}
+
+/* Kalau ada table-wrapper khusus yang terpasang di mobile, bebaskan di mobile */
+@media (max-width: 639px) {
+  .mobile-free-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
 }

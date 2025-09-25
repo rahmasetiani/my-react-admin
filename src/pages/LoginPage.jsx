@@ -1,227 +1,207 @@
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
-import "./../index.css"  // optional, untuk font Inter via @import
-import { api } from "../lib/api"   // <-- pastikan impor api
+// src/pages/LoginPage.jsx
+import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { api, setToken, ensureSession } from "../lib/api";
 
-
-// (opsional) ganti path ini ke logo kamu sendiri, mis: "/logo.png" atau import img
-const LOGO_URL = "/logo.png"   // taruh file di public/logo.png
+const LOGO_URL = "/logo.png";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPass, setShowPass] = useState(false)
-  const [err, setErr] = useState("")
-  const navigate = useNavigate()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTo = new URLSearchParams(location.search).get("next") || "/";
 
- const onSubmit = async (e) => {
-    e.preventDefault()
-    setErr("")
+  const pickToken = (data) =>
+    data?.token || data?.access_token || data?.jwt || data?.data?.token || "";
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
 
     try {
-      // NOTE: ganti validasi sesuai backend auth kamu.
-      // Di contoh ini, password masih dummy, tapi profil diambil dari /accounts
-      if (password !== "admin123") {
-        setErr("Email atau password salah")
-        return
+      // 1) Login
+      const { data } = await api.post("/auth/login", { email, password });
+
+      // 2) Jika server kirim token di body → simpan
+      const token = pickToken(data);
+      const user = data?.user || data?.data?.user || null;
+
+      if (token) {
+        setToken(token, { remember });
+        if (user?.id) localStorage.setItem("auth_user_id", String(user.id));
+        navigate(redirectTo, { replace: true });
+        return;
       }
 
-      // 1) ambil semua akun, cari yang email-nya cocok (case-insensitive)
-      const { data: accounts } = await api.get("/accounts?limit=200&offset=0")
-      const me =
-        (Array.isArray(accounts) ? accounts : []).find(
-          (a) => String(a.email || "").toLowerCase() === email.toLowerCase()
-        ) || null
-
-      if (!me) {
-        setErr("Akun tidak ditemukan di /accounts")
-        return
+      // 3) Jika tidak ada token → asumsi cookie-mode. Verifikasi sesi.
+      try {
+        const me = await ensureSession();
+        if (me?.id) localStorage.setItem("auth_user_id", String(me.id));
+        navigate(redirectTo, { replace: true });
+        return;
+      } catch {
+        throw new Error("Login gagal: token tidak diterima dan sesi cookie tidak valid");
       }
-
-      // 2) simpan token & user id
-      localStorage.setItem("auth_token", "dummy-token")
-      localStorage.setItem("auth_user_id", String(me.id))
-
-      // 3) masuk dashboard
-      navigate("/", { replace: true })
     } catch (e2) {
-      setErr(e2.message || "Gagal login")
+      const msg =
+        e2?.response?.data?.error ||
+        e2?.response?.data?.message ||
+        (typeof e2?.response?.data === "string" ? e2.response.data : "") ||
+        e2?.message ||
+        "Gagal login";
+      setErr(msg);
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div style={wrap}>
+    <div className="min-h-screen relative grid place-items-center overflow-hidden bg-gradient-to-br from-blue-600 to-indigo-900 px-4">
       {/* blobs */}
-      <div style={blobA} /><div style={blobB} />
+      <div className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-blue-400/40 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-indigo-400/40 blur-3xl" />
 
-      {/* CARD */}
-      <form onSubmit={onSubmit} style={card}>
-        {/* inner: biar input nggak kepanjangan */}
-        <div style={cardInner}>
-          {/* logo */}
-          <div style={{ textAlign:"center", marginBottom: 18 }}>
-            {LOGO_URL ? (
-              <img
-                src={LOGO_URL}
-                onError={(e)=>{ e.currentTarget.style.display="none" }}
-                alt="Logo"
-                style={logoImg}
-              />
-            ) : <div style={logoFallback}>IA</div>}
-            <h2 style={title}>Admin Login</h2>
-            <p style={subtitle}>Masuk untuk mengelola dashboard</p>
-          </div>
-
-          {err && <p style={errorBox}>{err}</p>}
-
-          {/* EMAIL */}
-          <div style={row}>
-            <label style={lbl}>Email</label>
-            <div style={fieldWrap}>
-              <input
-                type="email"
-                placeholder="admin@example.com"
-                value={email}
-                onChange={(e)=>setEmail(e.target.value)}
-                style={input}
-                required
-              />
-              <span style={leftIcon}><MailIcon/></span>
+      {/* card */}
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-md rounded-2xl bg-white/95 shadow-xl ring-1 ring-slate-200 backdrop-blur p-6 md:p-8"
+      >
+        {/* logo + title */}
+        <div className="text-center mb-6">
+          {LOGO_URL ? (
+            <img
+              src={LOGO_URL}
+              alt="Logo"
+              className="mx-auto mb-3 h-14 w-14 rounded-xl object-contain"
+              onError={(e) => (e.currentTarget.style.display = "none")}
+            />
+          ) : (
+            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white font-extrabold">
+              IA
             </div>
-          </div>
-
-          {/* PASSWORD */}
-          <div style={row}>
-            <label style={lbl}>Password</label>
-            <div style={fieldWrap}>
-              <input
-                type={showPass ? "text" : "password"}
-                placeholder="••••••••"
-                value={password}
-                onChange={(e)=>setPassword(e.target.value)}
-                style={input}
-                required
-              />
-              <span style={leftIcon}><LockIcon/></span>
-              <button type="button" onClick={()=>setShowPass(s=>!s)} style={rightIconBtn}>
-                {showPass ? <EyeOffIcon/> : <EyeIcon/>}
-              </button>
-            </div>
-          </div>
-
-          <div style={rowBetween}>
-            <label style={rememberLbl}>
-              <input type="checkbox" style={{ marginRight:6 }}/> Remember me
-            </label>
-            
-          </div>
-
-          <button type="submit" style={btnPrimary}>Login</button>
-
-          <p style={{ fontSize:12, color:"#64748b", textAlign:"center", marginTop:12 }}>
-            Tip: <code> Masuk dengan account yang telah dibuat IT !</code>
-          </p>
+          )}
+          <h2 className="text-2xl font-extrabold text-indigo-900">Admin Login</h2>
+          <p className="text-xs text-slate-500">Masuk untuk mengelola dashboard</p>
         </div>
+
+        {err && (
+          <p className="mb-4 rounded-lg bg-rose-100 px-3 py-2 text-center text-sm font-medium text-rose-700">
+            {err}
+          </p>
+        )}
+
+        {/* Email */}
+        <div className="mb-3">
+          <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              <MailIcon />
+            </span>
+            <input
+              type="email"
+              autoComplete="username"
+              placeholder="admin@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 pl-10 pr-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              required
+            />
+          </div>
+        </div>
+
+        {/* Password */}
+        <div className="mb-2">
+          <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              <LockIcon />
+            </span>
+            <input
+              type={showPass ? "text" : "password"}
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50 pl-10 pr-10 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPass((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+              aria-label={showPass ? "Sembunyikan password" : "Tampilkan password"}
+            >
+              {showPass ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </div>
+        </div>
+
+        {/* Remember */}
+        <div className="mb-4 flex items-center justify-between">
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            Remember me
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 px-4 text-sm font-bold text-white shadow-md transition hover:from-blue-600 hover:to-blue-700 disabled:opacity-50"
+        >
+          {loading ? "Memproses..." : "Login"}
+        </button>
+
+        <p className="mt-3 text-center text-xs text-slate-500">
+          Tip: gunakan email &amp; password yang terdaftar di sistem.
+        </p>
       </form>
     </div>
-  )
+  );
 }
 
-/* ===== Icons (SVG) ===== */
-const EyeIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-  <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12s-3.75 6.75-9.75 6.75S2.25 12 2.25 12Z" stroke="#64748b" strokeWidth="1.7"/>
-  <circle cx="12" cy="12" r="3.25" stroke="#64748b" strokeWidth="1.7"/>
-</svg>)
-const EyeOffIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-  <path d="M3 3l18 18" stroke="#64748b" strokeWidth="1.7"/>
-  <path d="M2.25 12s3.75-6.75 9.75-6.75c2.2 0 4.08.73 5.69 1.82M21.75 12s-3.75 6.75-9.75 6.75c-2.2 0-4.08-.73-5.69-1.82" stroke="#64748b" strokeWidth="1.7"/>
-  <circle cx="12" cy="12" r="3.25" stroke="#64748b" strokeWidth="1.7"/>
-</svg>)
-const MailIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-  <path d="M4 6h16v12H4z" stroke="#94a3b8" strokeWidth="1.6"/>
-  <path d="M4 7l8 6 8-6" stroke="#94a3b8" strokeWidth="1.6"/>
-</svg>)
-const LockIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-  <rect x="4.5" y="10" width="15" height="9.5" rx="2" stroke="#94a3b8" strokeWidth="1.6"/>
-  <path d="M8 10V8a4 4 0 118 0v2" stroke="#94a3b8" strokeWidth="1.6"/>
-</svg>)
-
-/* ===== Styles ===== */
-const wrap = {
-  minHeight: "100vh",
-  display: "grid",
-  placeItems: "center",
-  background: "linear-gradient(135deg, #2563eb, #1e3a8a)",
-  position: "relative",
-  overflow: "hidden",
-  padding: 16,
+/* ===== Icons ===== */
+function EyeIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" className="text-slate-500">
+      <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12s-3.75 6.75-9.75 6.75S2.25 12 2.25 12Z" stroke="currentColor" strokeWidth="1.7" fill="none" />
+      <circle cx="12" cy="12" r="3.25" stroke="currentColor" strokeWidth="1.7" fill="none" />
+    </svg>
+  );
 }
-const card = {
-  background: "rgba(255,255,255,0.95)",
-  borderRadius: 16,
-  boxShadow: "0 20px 45px rgba(0,0,0,.18)",
-  backdropFilter: "blur(6px)",
-  // batasi lebar card, tapi biarkan responsif
-  width: "min(96vw, 540px)",
+function EyeOffIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" className="text-slate-500">
+      <path d="M3 3l18 18" stroke="currentColor" strokeWidth="1.7" fill="none" />
+      <path d="M2.25 12s3.75-6.75 9.75-6.75c2.2 0 4.08.73 5.69 1.82M21.75 12s-3.75 6.75-9.75 6.75c-2.2 0-4.08-.73-5.69-1.82" stroke="currentColor" strokeWidth="1.7" fill="none" />
+      <circle cx="12" cy="12" r="3.25" stroke="currentColor" strokeWidth="1.7" fill="none" />
+    </svg>
+  );
 }
-const cardInner = {
-  // INI KUNCI: input tidak kepanjangan
-  width: "min(100%, 420px)",
-  margin: "0 auto",
-  padding: "34px 24px",
-  boxSizing: "border-box",
+function MailIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" className="text-slate-400">
+      <path d="M4 6h16v12H4z" stroke="currentColor" strokeWidth="1.6" fill="none" />
+      <path d="M4 7l8 6 8-6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+    </svg>
+  );
 }
-const title = { margin: "8px 0 2px", fontSize: 22, fontWeight: 800, color: "#1e3a8a", textAlign:"center" }
-const subtitle = { margin: 0, fontSize: 12, color: "#6b7280", textAlign:"center" }
-
-const logoImg = {
-  width: 56, height: 56, objectFit: "contain",
-  display: "inline-block", marginBottom: 8, borderRadius: 12,
-//   boxShadow: "0 6px 16px rgba(37,99,235,.25)",
+function LockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" className="text-slate-400">
+      <rect x="4.5" y="10" width="15" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.6" fill="none" />
+      <path d="M8 10V8a4 4 0 1 1 8 0v2" stroke="currentColor" strokeWidth="1.6" fill="none" />
+    </svg>
+  );
 }
-const logoFallback = {
-  display:"inline-grid", placeItems:"center",
-  width:56, height:56, borderRadius:"50%",
-  background:"linear-gradient(135deg,#3b82f6,#2563eb)",
-  color:"#fff", fontWeight:800, letterSpacing:1, marginBottom:8
-}
-
-const row = { marginBottom: 12 }
-const lbl = { display:"block", fontSize:13, fontWeight:600, marginBottom:6, color:"#334155" }
-
-const fieldWrap = { position:"relative", width:"100%" }
-
-const input = {
-  boxSizing: "border-box",        // biar width bener
-  width: "100%",
-  padding: "12px 44px 12px 40px", // ruang ikon
-  border: "1px solid #d1d5db",
-  borderRadius: 12,
-  fontSize: 14,
-  outline: "none",
-  background: "#f8fafc",
-}
-const leftIcon = { position:"absolute", left:12, top:"50%", transform:"translateY(-50%)" }
-const rightIconBtn = {
-  position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
-  background:"none", border:"none", cursor:"pointer", padding:6, borderRadius:8
-}
-
-const rowBetween = { display:"flex", justifyContent:"space-between", alignItems:"center", margin:"6px 0 12px" }
-const rememberLbl = { display:"flex", alignItems:"center", fontSize:12, color:"#475569" }
-// const linkBlue = { fontSize:12, color:"#2563eb", textDecoration:"none" }
-
-const btnPrimary = {
-  width:"100%", padding:"12px", borderRadius:12,
-  background:"linear-gradient(180deg,#3b82f6,#2563eb)",
-  color:"#fff", border:"none", fontSize:15, fontWeight:700,
-  boxShadow:"0 10px 25px rgba(59,130,246,.35)", cursor:"pointer",
-}
-
-const errorBox = {
-  background:"#fee2e2", color:"#b91c1c",
-  padding:"10px 12px", borderRadius:10, fontSize:13, marginBottom:14, textAlign:"center",
-}
-
-const blobA = { position:"absolute", width:360, height:360, borderRadius:"50%", background:"rgba(59,130,246,0.55)", top:-120, left:-120, filter:"blur(100px)" }
-const blobB = { position:"absolute", width:300, height:300, borderRadius:"50%", background:"rgba(37,99,235,0.45)", bottom:-120, right:-100, filter:"blur(120px)" }

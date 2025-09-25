@@ -5,6 +5,8 @@ import HealthPage from "./pages/HealthPage.jsx";
 import SubjekPage from "./pages/SubjekPage.jsx";
 import HelpPage from "./pages/HelpPage.jsx";
 import DemoPage from "./pages/DemoPage.jsx";
+import ProfilePage from "./pages/ProfilePage.jsx"; // ⬅️ tambahkan
+
 
 const LOGO_URL = "/logo.png"; // /public/logo.png
 
@@ -111,10 +113,17 @@ export default function App() {
   useEffect(() => { if (isDesktop) setDrawerOpen(false); }, [isDesktop]);
 
   const logout = () => {
+    if (!window.confirm("Apakah Anda yakin ingin keluar?")) {
+      console.log("Logout dibatalkan");
+      return;
+    }
+    console.log("Logout dikonfirmasi");
+
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_user_id");
     navigate("/login", { replace: true });
   };
+
 
   /* ---------- Layout state ---------- */
   const layoutClass = useMemo(() => {
@@ -175,14 +184,22 @@ export default function App() {
                 <span style={{ marginLeft: "auto", opacity: .75 }}>▾</span>
               </button>
             )}
-
             {sideProfileOpen && (
               <div
                 className="profile-dd"
                 role="menu"
                 style={{ left: 12, right: 12, position: "absolute", marginTop: 8 }}
               >
-                <div className="drop-item" onClick={() => setSideProfileOpen(false)}>Profil</div>
+                <div
+                  className="drop-item"
+                  onClick={() => {
+                    setSideProfileOpen(false);
+                    setDrawerOpen(false);
+                    navigate("/profile");
+                  }}
+                >
+                  Profil
+                </div>
                 <div className="drop-item" onClick={() => setSideProfileOpen(false)}>Pengaturan</div>
                 <hr className="drop-sep" />
                 <div className="drop-item" style={{ color: "#ef4444" }} onClick={logout}>Logout</div>
@@ -202,7 +219,7 @@ export default function App() {
 <div
   style={{
     marginTop: "20px",        // jarak dari menu terakhir ke tombol
-    marginBottom: "500px",     // jarak dari bawah layar (biar ga nempel banget)
+    marginBottom: "100px",     // jarak dari bawah layar (biar ga nempel banget)
     display: "flex",
     justifyContent: "center",
   }}
@@ -262,13 +279,20 @@ export default function App() {
               )}
 
               {profileOpen && (
-                <div className="profile-dd" role="menu">
-                  <div className="drop-item" onClick={() => setProfileOpen(false)}>Profil</div>
-                  <div className="drop-item" onClick={() => setProfileOpen(false)}>Pengaturan</div>
-                  <hr className="drop-sep" />
-                  <div className="drop-item" style={{ color: "#ef4444" }} onClick={logout}>Logout</div>
-                </div>
-              )}
+  <div className="profile-dd" role="menu">
+    <div
+      className="drop-item"
+      onClick={() => {
+        setProfileOpen(false);
+        navigate("/profile");
+      }}
+    >
+      Profil
+    </div>
+    <hr className="drop-sep" />
+    <div className="drop-item" style={{ color: "#ef4444" }} onClick={logout}>Logout</div>
+  </div>
+)}
             </div>
           )}
         </header>
@@ -281,6 +305,7 @@ export default function App() {
             <Route path="/subjek" element={<SubjekPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/demo" element={<DemoPage />} />
+            <Route path="/profile" element={<ProfilePage />} /> {/* ⬅️ baru */}
           </Routes>
         </main>
       </div>
