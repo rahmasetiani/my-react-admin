@@ -6,68 +6,31 @@ import "./../index.css"
 const STATUSES = ["PENDING", "ON_PROGRESS", "SOLVED", "CANCELLED"]
 
 const buildMessageByStatus = (status, { ticket, reason }) => {
-  const nama = ticket?.nama?.trim() || "Pengguna";
-  const id = ticket?.id ?? "-";
-  const catatan = reason?.trim() ? reason.trim() : "";
-
   switch (status) {
     case "PENDING":
-      return [
-        `Halo, ${nama}.`,
-        ``,
-        `Tiket Anda (#${id}) sudah kami terima dan saat ini berstatus **PENDING**.`,
-        catatan ? `Catatan: ${catatan}` : ``,
-        ``,
-        `Tim kami akan menindaklanjuti secepatnya. Terima kasih atas kesabarannya.`,
-        ``,
-        `Salam,`,
-        `IronAsia`,
-      ].filter(Boolean).join("\n");
-
+      return `Halo ${ticket?.nama || "User"},\n\nTiket Anda (#${
+        ticket?.id
+      }) sudah kami terima dan berada pada status PENDING.\n${
+        reason ? "Catatan: " + reason + "\n\n" : ""
+      }Tim kami akan menindaklanjuti secepatnya.\n\nSalam,\nSupport Team`
     case "ON_PROGRESS":
-      return [
-        `Halo, ${nama}.`,
-        ``,
-        `Tiket Anda (#${id}) saat ini **sedang diproses (ON_PROGRESS)**.`,
-        catatan ? `Detail: ${catatan}` : ``,
-        ``,
-        `Kami akan mengabari kembali setelah ada perkembangan lebih lanjut.`,
-        ``,
-        `Salam,`,
-        `IronAsia`,
-      ].filter(Boolean).join("\n");
-
+      return `Halo ${ticket?.nama || "User"},\n\nTiket #${
+        ticket?.id
+      } saat ini berstatus ON_PROGRESS.\n${
+        reason ? "Detail: " + reason + "\n" : ""
+      }\nKami akan mengabari lagi setelah ada perkembangan.\n\nSalam,\nSupport Team`
     case "SOLVED":
-      return [
-        `Halo, ${nama}.`,
-        ``,
-        `Tiket Anda (#${id}) telah **diselesaikan (SOLVED)**.`,
-        catatan ? `Ringkasan penyelesaian: ${catatan}` : ``,
-        ``,
-        `Jika masih terdapat kendala, silakan buat tiket baru melalui halaman IronAsia.`,
-        ``,
-        `Salam,`,
-        `IronAsia`,
-      ].filter(Boolean).join("\n");
-
+      return `Halo ${ticket?.nama || "User"},\n\nTiket #${ticket?.id} telah SOLVED.\n${
+        reason ? "Ringkasan penyelesaian: " + reason + "\n" : ""
+      }\nJika masih ada kendala, buat tiket baru pada website LandingPage IronAsia.\n\nSalam,\nSupport Team`
     case "CANCELLED":
-      return [
-        `Halo, ${nama}.`,
-        ``,
-        `Tiket Anda (#${id}) berstatus **dibatalkan (CANCELLED)**.`,
-        catatan ? `Alasan pembatalan: ${catatan}` : ``,
-        ``,
-        `Anda dapat mengajukan kembali tiket baru jika diperlukan.`,
-        ``,
-        `Salam,`,
-        `IronAsia`,
-      ].filter(Boolean).join("\n");
-
+      return `Halo ${ticket?.nama || "User"},\n\nTiket #${ticket?.id} berstatus CANCELLED.\n${
+        reason ? "Alasan pembatalan: " + reason + "\n" : ""
+      }\nSilakan ajukan kembali jika diperlukan.\n\nSalam,\nSupport Team`
     default:
-      return "";
+      return ""
   }
-};
-
+}
 
 export default function HelpPage() {
   const [items, setItems] = useState([])
