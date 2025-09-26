@@ -1,6 +1,7 @@
 // src/pages/LoginPage.jsx
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { SmallSwal, SmallToast } from "../lib/alerts";
 import { api, setToken, ensureSession } from "../lib/api";
 
 const LOGO_URL = "/logo.png";
@@ -10,8 +11,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [remember, setRemember] = useState(true);
-  const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const emailRef = useRef(null);
+  const passRef  = useRef(null);
+
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTo = new URLSearchParams(location.search).get("next") || "/";
@@ -19,34 +23,95 @@ export default function LoginPage() {
   const pickToken = (data) =>
     data?.token || data?.access_token || data?.jwt || data?.data?.token || "";
 
+  // ===== SweetAlert (versi kecil via SmallSwal/SmallToast) =====
+  const showLoading = (title = "Memproses...") =>
+    SmallSwal.fire({
+      title,
+      allowEnterKey: false,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => SmallSwal.showLoading(),
+      showConfirmButton: false,
+      backdrop: true,
+    });
+
+  const showSuccess = (title = "Berhasil masuk") =>
+    SmallSwal.fire({
+      icon: "success",
+      title,
+      timer: 1200,
+      showConfirmButton: false,
+    });
+
+  const showError = (title = "Login gagal", text = "Terjadi kesalahan") =>
+    SmallSwal.fire({
+      icon: "error",
+      title,
+      text,
+      confirmButtonText: "OK",
+    });
+
+  const showWarn = (title = "Periksa kembali", text = "") =>
+    SmallSwal.fire({
+      icon: "warning",
+      title,
+      text,
+      confirmButtonText: "OK",
+    });
+
   const onSubmit = async (e) => {
     e.preventDefault();
-    setErr("");
+    if (loading) return;
+
+    // Validasi kosong pakai SweetAlert kecil
+    const emptyEmail = !email.trim();
+    const emptyPass  = !password;
+
+    if (emptyEmail || emptyPass) {
+      await showWarn(
+        "Form belum lengkap",
+        `${emptyEmail ? "Email" : ""}${emptyEmail && emptyPass ? " dan " : ""}${emptyPass ? "password" : ""} wajib diisi.`
+      );
+      if (emptyEmail) emailRef.current?.focus();
+      else passRef.current?.focus();
+      return;
+    }
+
     setLoading(true);
+    showLoading("Masuk ke sistem...");
 
     try {
       // 1) Login
       const { data } = await api.post("/auth/login", { email, password });
 
-      // 2) Jika server kirim token di body → simpan
+      // 2) Ambil token dari berbagai kemungkinan key
       const token = pickToken(data);
       const user = data?.user || data?.data?.user || null;
 
+      // 3) Jika server kirim token di body → simpan
       if (token) {
         setToken(token, { remember });
         if (user?.id) localStorage.setItem("auth_user_id", String(user.id));
+        SmallSwal.close();
+        await showSuccess();
+        // atau pakai toast kecil:
+        // await SmallToast.fire({ icon: "success", title: "Berhasil masuk" });
         navigate(redirectTo, { replace: true });
         return;
       }
 
-      // 3) Jika tidak ada token → asumsi cookie-mode. Verifikasi sesi.
+      // 4) Cookie-mode fallback
       try {
         const me = await ensureSession();
         if (me?.id) localStorage.setItem("auth_user_id", String(me.id));
+        SmallSwal.close();
+        await showSuccess();
         navigate(redirectTo, { replace: true });
         return;
       } catch {
-        throw new Error("Login gagal: token tidak diterima dan sesi cookie tidak valid");
+        throw new Error(
+          "Token tidak diterima dan sesi (cookie) tidak valid. Pastikan server mengembalikan token atau mengatur cookie sesi."
+        );
       }
     } catch (e2) {
       const msg =
@@ -54,8 +119,9 @@ export default function LoginPage() {
         e2?.response?.data?.message ||
         (typeof e2?.response?.data === "string" ? e2.response.data : "") ||
         e2?.message ||
-        "Gagal login";
-      setErr(msg);
+        "Gagal login. Periksa kembali email/password atau coba lagi.";
+      SmallSwal.close();
+      await showError("Login gagal", msg);
     } finally {
       setLoading(false);
     }
@@ -70,6 +136,7 @@ export default function LoginPage() {
       {/* card */}
       <form
         onSubmit={onSubmit}
+        noValidate
         className="w-full max-w-md rounded-2xl bg-white/95 shadow-xl ring-1 ring-slate-200 backdrop-blur p-6 md:p-8"
       >
         {/* logo + title */}
@@ -90,12 +157,6 @@ export default function LoginPage() {
           <p className="text-xs text-slate-500">Masuk untuk mengelola dashboard</p>
         </div>
 
-        {err && (
-          <p className="mb-4 rounded-lg bg-rose-100 px-3 py-2 text-center text-sm font-medium text-rose-700">
-            {err}
-          </p>
-        )}
-
         {/* Email */}
         <div className="mb-3">
           <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
@@ -104,6 +165,8 @@ export default function LoginPage() {
               <MailIcon />
             </span>
             <input
+              ref={emailRef}
+              name="email"
               type="email"
               autoComplete="username"
               placeholder="admin@example.com"
@@ -123,6 +186,8 @@ export default function LoginPage() {
               <LockIcon />
             </span>
             <input
+              ref={passRef}
+              name="password"
               type={showPass ? "text" : "password"}
               autoComplete="current-password"
               placeholder="••••••••"
@@ -155,6 +220,7 @@ export default function LoginPage() {
           </label>
         </div>
 
+        {/* tombol */}
         <button
           type="submit"
           disabled={loading}

@@ -1,6 +1,9 @@
 // src/pages/DemoPage.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { SmallSwal, SmallToast } from "../lib/alerts"; // ⬅️ pakai swal kecil
+import "./../index.css";
+import { isEmail } from "../lib/validator"; // ⬅️ pakai validator email
 
 const STATUSES = ["PENDING", "APPROVE", "RESCHEDULE", "CANCELLED", "DONE"];
 
@@ -59,6 +62,7 @@ export default function DemoPage() {
   });
   const markTouched = (k) => setTouched((t) => ({ ...t, [k]: true }));
   const [addOpen, setAddOpen] = useState(false);
+  const emailRef = useRef(null);
 
   // detail
   const [detailOpen, setDetailOpen] = useState(false);
@@ -86,117 +90,127 @@ export default function DemoPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  /* ==== SweetAlert helpers (kecil) ==== */
+  const showLoading = (title = "Memproses...") =>
+    SmallSwal.fire({
+      title,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => SmallSwal.showLoading(),
+    });
+
+  const toast = (title, icon = "success") => SmallToast.fire({ title, icon });
+  const alertWarn = (t, m = "") => SmallSwal.fire({ icon: "warning", title: t, text: m, confirmButtonText: "OK" });
+  const alertError = (t, m = "") => SmallSwal.fire({ icon: "error", title: t, text: m, confirmButtonText: "OK" });
+  const confirmDialog = (t, m, ok = "Ya, hapus") =>
+    SmallSwal.fire({ icon: "question", title: t, text: m, showCancelButton: true, confirmButtonText: ok, cancelButtonText: "Batal" });
+
+  /* ==== load data ==== */
   const load = async () => {
     setLoading(true);
     try {
       const { data } = await api.get("/demo?limit=200&offset=0");
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error("Failed to load demos:", e);
+      const msg = e?.response?.data?.message || e?.message || "Gagal memuat data demo.";
+      await alertError("Gagal Memuat", msg);
     } finally {
       setLoading(false);
     }
   };
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  // ====== VALIDASI CREATE ala Help ======
+  /* ====== VALIDASI CREATE ====== */
   const isEmpty = (v) => String(v ?? "").trim() === "";
   const baseInput = "h-10 w-full rounded-xl border px-3";
   const redIf = (cond) => (cond ? " border-rose-400 ring-1 ring-rose-200" : " border-slate-200");
 
-  const errNama = touched.nama && isEmpty(form.nama);
-  const errEmail = touched.email && isEmpty(form.email);
-  const errJenis = touched.jenis_demo && isEmpty(form.jenis_demo);
-  const errDate = touched.prefered_date && isEmpty(form.prefered_date);
-  const errTime = touched.prefered_time && isEmpty(form.prefered_time);
-  const errMsg = touched.message && isEmpty(form.message);
+  const errNama  = touched.nama          && isEmpty(form.nama);
+  const errEmail = touched.email         && isEmpty(form.email);
+  const errJenis = touched.jenis_demo    && isEmpty(form.jenis_demo);
+  const errDate  = touched.prefered_date && isEmpty(form.prefered_date);
+  const errTime  = touched.prefered_time && isEmpty(form.prefered_time);
+  const errMsg   = touched.message       && isEmpty(form.message);
 
-  // create submit — tanpa alert gabungan
-const submitCreate = async (e) => {
-  e.preventDefault();
+  const submitCreate = async (e) => {
+    e.preventDefault();
 
-  const missing =
-    !String(form.nama).trim() ||
-    !String(form.email).trim() ||
-    !String(form.jenis_demo).trim() ||
-    !String(form.prefered_date).trim() ||
-    !String(form.prefered_time).trim() ||
-    !String(form.message).trim();
+    const missing =
+      isEmpty(form.nama) ||
+      isEmpty(form.email) ||
+      isEmpty(form.jenis_demo) ||
+      isEmpty(form.prefered_date) ||
+      isEmpty(form.prefered_time) ||
+      isEmpty(form.message);
 
-  if (missing) {
-    // tandai semua field biar muncul outline merah & pesan per-field
-    setTouched({
-      nama: true,
-      email: true,
-      jenis_demo: true,
-      prefered_date: true,
-      prefered_time: true,
-      message: true,
-    });
-    // tidak ada alert / banner apa pun
-    return;
-  }
+    if (missing) {
+      setTouched({
+        nama: true, email: true, jenis_demo: true, prefered_date: true, prefered_time: true, message: true,
+      });
+      await alertWarn("Form belum lengkap", "Nama, Email, Jenis, Tanggal, Jam dan Message wajib diisi.");
+      return;
+    }
+    if (!isEmail(form.email)) {
+      await alertWarn("Email tidak valid", "Contoh: nama@domain.com");
+      emailRef.current?.focus();
+      return;
+    }
 
-  try {
-    await api.post("/demo", {
-      ...form,
-      prefered_date: formatDate(form.prefered_date),
-    });
-    setForm({
-      nama: "",
-      email: "",
-      message: "",
-      jenis_demo: "ONLINE",
-      prefered_date: "",
-      prefered_time: "",
-    });
-    setTouched({
-      nama: false,
-      email: false,
-      jenis_demo: false,
-      prefered_date: false,
-      prefered_time: false,
-      message: false,
-    });
-    setAddOpen(false);
-    await load();
-  } catch (e2) {
-    console.error("Create demo failed:", e2);
-    // kalau mau, bisa pakai toast di sini. sekarang kita diamkan.
-  }
-};
+    try {
+      showLoading("Menyimpan data...");
+      await api.post("/demo", {
+        ...form,
+        prefered_date: formatDate(form.prefered_date),
+      });
+      SmallSwal.close();
+      setForm({ nama: "", email: "", message: "", jenis_demo: "ONLINE", prefered_date: "", prefered_time: "" });
+      setTouched({ nama: false, email: false, jenis_demo: false, prefered_date: false, prefered_time: false, message: false });
+      setAddOpen(false);
+      await load();
+      await toast("Demo berhasil dibuat");
+    } catch (e2) {
+      SmallSwal.close();
+      const msg = e2?.response?.data?.message || e2?.message || "Gagal membuat demo.";
+      await alertError("Gagal", msg);
+    }
+  };
 
-  // detail
+  /* ===== detail ===== */
   const openDetail = async (id) => {
     try {
+      showLoading("Memuat detail...");
       const { data } = await api.get(`/demo/${id}`);
+      SmallSwal.close();
       setSelected(data || null);
       setDetailOpen(true);
     } catch (e) {
-      console.error("Open detail failed:", e);
-      alert(e?.message || "Gagal membuka detail.");
+      SmallSwal.close();
+      const msg = e?.response?.data?.message || e?.message || "Gagal membuka detail.";
+      await alertError("Gagal", msg);
     }
   };
 
-  // delete
+  /* ===== delete ===== */
   const remove = async (id) => {
-    if (!confirm("Hapus demo ini?")) return;
+    const r = await confirmDialog("Hapus demo ini?", "Tindakan ini tidak bisa dibatalkan.", "Ya, hapus");
+    if (!r.isConfirmed) return;
+
     try {
+      showLoading("Menghapus data...");
       await api.delete(`/demo/${id}`);
+      SmallSwal.close();
       await load();
-      if (selected?.id === id) {
-        setDetailOpen(false);
-        setSelected(null);
-      }
+      if (selected?.id === id) { setDetailOpen(false); setSelected(null); }
+      await toast("Data dihapus");
     } catch (e) {
-      console.error("Delete failed:", e);
-      alert(e?.message || "Gagal menghapus demo.");
+      SmallSwal.close();
+      const msg = e?.response?.data?.message || e?.message || "Gagal menghapus demo.";
+      await alertError("Gagal", msg);
     }
   };
 
-  // reply
+  /* ===== reply ===== */
   const openReply = (demo) => {
     const initial = "PENDING";
     const msg = buildMessageByStatus(initial, { demo, reason: "" });
@@ -232,12 +246,14 @@ const submitCreate = async (e) => {
   const submitReply = async (e) => {
     e.preventDefault();
     if (!replyFor) return;
+
     if (!replyForm.message.trim()) {
-      alert("Reply message wajib diisi");
+      await alertWarn("Validasi", "Reply message wajib diisi.");
       return;
     }
     try {
       setReplyBusy(true);
+      showLoading("Mengirim reply...");
       await api.post(`/demo/${replyFor.id}/replies`, {
         message: replyForm.message.trim(),
         status: replyForm.template,
@@ -246,13 +262,15 @@ const submitCreate = async (e) => {
         location: replyForm.location,
         send_email: !!replyForm.send_email,
       });
+      SmallSwal.close();
       setReplyOpen(false);
       setReplyFor(null);
       await load();
-      alert("Reply terkirim.");
+      await toast("Reply terkirim");
     } catch (e2) {
-      console.error("Reply failed:", e2);
-      alert(e2?.message || "Gagal mengirim reply");
+      SmallSwal.close();
+      const msg = e2?.response?.data?.message || e2?.message || "Gagal mengirim reply.";
+      await alertError("Gagal", msg);
     } finally {
       setReplyBusy(false);
     }
@@ -263,9 +281,9 @@ const submitCreate = async (e) => {
     const s = (q || "").trim().toLowerCase();
     let list = items;
 
-    if (filterJenis) list = list.filter((i) => String(i.jenis_demo) === String(filterJenis));
+    if (filterJenis)  list = list.filter((i) => String(i.jenis_demo) === String(filterJenis));
     if (filterStatus) list = list.filter((i) => String(i.status) === String(filterStatus));
-    if (dateFilter) list = list.filter((i) => formatDate(i.prefered_date) === dateFilter);
+    if (dateFilter)   list = list.filter((i) => formatDate(i.prefered_date) === dateFilter);
 
     if (s) {
       list = list.filter(
@@ -285,9 +303,7 @@ const submitCreate = async (e) => {
   const start = (curPage - 1) * pageSize;
   const displayRows = filtered.slice(start, start + pageSize);
 
-  useEffect(() => {
-    setPage(1);
-  }, [q, filterJenis, filterStatus, dateFilter, pageSize]);
+  useEffect(() => { setPage(1); }, [q, filterJenis, filterStatus, dateFilter, pageSize]);
 
   const badgeClass = (status) =>
     "inline-flex items-center px-2 py-0.5 rounded-full text-xs border " +
@@ -308,34 +324,18 @@ const submitCreate = async (e) => {
         <h2 className="text-xl md:text-2xl lg:text-3xl font-semibold tracking-tight">Request Demo</h2>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <select
-            value={filterJenis}
-            onChange={(e) => setFilterJenis(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm md:text-base"
-          >
+          <select value={filterJenis} onChange={(e) => setFilterJenis(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm md:text-base">
             <option value="">Semua Jenis</option>
             <option value="ONLINE">ONLINE</option>
             <option value="OFFLINE">OFFLINE</option>
           </select>
 
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm md:text-base"
-          >
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm md:text-base">
             <option value="">Semua Status</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
 
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"
-            title="Filter tanggal"
-          />
+          <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" title="Filter tanggal" />
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             <div className="relative w-full sm:w-80 md:w-96 lg:w-[420px]">
@@ -351,22 +351,8 @@ const submitCreate = async (e) => {
             <button
               onClick={() => {
                 setAddOpen(true);
-                setForm({
-                  nama: "",
-                  email: "",
-                  message: "",
-                  jenis_demo: "ONLINE",
-                  prefered_date: "",
-                  prefered_time: "",
-                });
-                setTouched({
-                  nama: false,
-                  email: false,
-                  jenis_demo: false,
-                  prefered_date: false,
-                  prefered_time: false,
-                  message: false,
-                });
+                setForm({ nama: "", email: "", message: "", jenis_demo: "ONLINE", prefered_date: "", prefered_time: "" });
+                setTouched({ nama: false, email: false, jenis_demo: false, prefered_date: false, prefered_time: false, message: false });
               }}
               className="h-10 rounded-xl bg-blue-600 px-4 text-white text-sm md:text-base shadow-sm transition hover:bg-blue-700 active:translate-y-px"
             >
@@ -463,6 +449,7 @@ const submitCreate = async (e) => {
         </div>
       </div>
 
+      {/* footer */}
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-0 sm:px-1">
         <div className="text-xs text-slate-500">
           Menampilkan <span className="font-medium">{displayRows.length}</span> dari{" "}
@@ -470,16 +457,8 @@ const submitCreate = async (e) => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm"
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-          >
-            {[5, 10, 20, 50].map((n) => (
-              <option key={n} value={n}>
-                {n}/hal
-              </option>
-            ))}
+          <select className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+            {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}/hal</option>)}
           </select>
 
           <div className="flex flex-wrap items-center gap-1">
@@ -495,7 +474,7 @@ const submitCreate = async (e) => {
       {/* ===== MODAL TAMBAH ===== */}
       {addOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-3 sm:p-4">
-          <form onSubmit={submitCreate} className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
+          <form onSubmit={submitCreate} noValidate className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
             <div className="max-h-[80vh] overflow-y-auto p-5">
               <div className="mb-3 flex items-start justify-between">
                 <h3 className="text-lg font-semibold">Tambah Demo</h3>
@@ -516,7 +495,8 @@ const submitCreate = async (e) => {
 
                 <div className="sm:col-span-1">
                   <input
-                    type="email"
+                    ref={emailRef}
+                    type="text" // pakai text supaya tidak keluar tooltip native
                     placeholder="Email *"
                     value={form.email}
                     onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
@@ -657,7 +637,7 @@ const submitCreate = async (e) => {
                     <label className="mb-1 block text-xs font-medium text-slate-600">Lokasi / Link</label>
                     <input value={replyForm.location} onChange={(e) => updateReplyForm({ location: e.target.value })} className="h-10 w-full rounded-xl border border-slate-200 px-3" />
                   </div>
-                  <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                  <label className="flex items-center gap-2 text-sm sm:col-span-2 select-none">
                     <input type="checkbox" checked={replyForm.send_email} onChange={(e) => setReplyForm((f) => ({ ...f, send_email: e.target.checked }))} />
                     Kirim Email ke pemohon
                   </label>

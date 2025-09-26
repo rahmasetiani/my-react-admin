@@ -1,9 +1,11 @@
 // src/pages/HelpPage.jsx
-import { useEffect, useMemo, useRef, useState } from "react"
-import { api } from "../lib/api"
-import "./../index.css"
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../lib/api";
+import { SmallSwal, SmallToast } from "../lib/alerts";
+import "./../index.css";
+import { isEmail } from "../lib/validator";
 
-const STATUSES = ["PENDING", "ON_PROGRESS", "SOLVED", "CANCELLED"]
+const STATUSES = ["PENDING", "ON_PROGRESS", "SOLVED", "CANCELLED"];
 
 const buildMessageByStatus = (status, { ticket, reason }) => {
   switch (status) {
@@ -12,238 +14,284 @@ const buildMessageByStatus = (status, { ticket, reason }) => {
         ticket?.id
       }) sudah kami terima dan berada pada status PENDING.\n${
         reason ? "Catatan: " + reason + "\n\n" : ""
-      }Tim kami akan menindaklanjuti secepatnya.\n\nSalam,\nSupport Team`
+      }Tim kami akan menindaklanjuti secepatnya.\n\nSalam,\nSupport Team`;
     case "ON_PROGRESS":
       return `Halo ${ticket?.nama || "User"},\n\nTiket #${
         ticket?.id
       } saat ini berstatus ON_PROGRESS.\n${
         reason ? "Detail: " + reason + "\n" : ""
-      }\nKami akan mengabari lagi setelah ada perkembangan.\n\nSalam,\nSupport Team`
+      }\nKami akan mengabari lagi setelah ada perkembangan.\n\nSalam,\nSupport Team`;
     case "SOLVED":
       return `Halo ${ticket?.nama || "User"},\n\nTiket #${ticket?.id} telah SOLVED.\n${
         reason ? "Ringkasan penyelesaian: " + reason + "\n" : ""
-      }\nJika masih ada kendala, buat tiket baru pada website LandingPage IronAsia.\n\nSalam,\nSupport Team`
+      }\nJika masih ada kendala, buat tiket baru pada website LandingPage IronAsia.\n\nSalam,\nSupport Team`;
     case "CANCELLED":
       return `Halo ${ticket?.nama || "User"},\n\nTiket #${ticket?.id} berstatus CANCELLED.\n${
         reason ? "Alasan pembatalan: " + reason + "\n" : ""
-      }\nSilakan ajukan kembali jika diperlukan.\n\nSalam,\nSupport Team`
+      }\nSilakan ajukan kembali jika diperlukan.\n\nSalam,\nSupport Team`;
     default:
-      return ""
+      return "";
   }
-}
+};
 
 export default function HelpPage() {
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   // subjek dropdown
-  const [subjekOptions, setSubjekOptions] = useState([])
+  const [subjekOptions, setSubjekOptions] = useState([]);
 
   // form create + touched
-  const [form, setForm] = useState({ nama: "", email: "", subjek_id: "", message: "", picture: null })
-  const [touched, setTouched] = useState({ nama: false, email: false, subjek_id: false, message: false })
-  const markTouched = (key) => setTouched((t) => ({ ...t, [key]: true }))
-  const fileRef = useRef(null)
+  const [form, setForm] = useState({ nama: "", email: "", subjek_id: "", message: "", picture: null });
+  const [touched, setTouched] = useState({ nama: false, email: false, subjek_id: false, message: false });
+  const markTouched = (key) => setTouched((t) => ({ ...t, [key]: true }));
+  const fileRef = useRef(null);
+  const emailRef = useRef(null);
 
   // detail modal
-  const [detailOpen, setDetailOpen] = useState(false)
-  const [selected, setSelected] = useState(null)
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
 
   // reply modal
-  const [replyOpen, setReplyOpen] = useState(false)
-  const [replyFor, setReplyFor] = useState(null)
-  const [replyBusy, setReplyBusy] = useState(false)
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyFor, setReplyFor] = useState(null);
+  const [replyBusy, setReplyBusy] = useState(false);
   const [replyForm, setReplyForm] = useState({
     template: "PENDING",
     reason: "",
     message: "",
     picture: null,
-    send_email: true, // NEW
-  })
-  const replyFileRef = useRef(null)
+    send_email: true,
+  });
+  const replyFileRef = useRef(null);
 
   // create modal
-  const [addOpen, setAddOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false);
 
   // search + pagination + filter
-  const [q, setQ] = useState("")
-  const [filterSubjek, setFilterSubjek] = useState("")
-  const [filterStatus, setFilterStatus] = useState("")
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [q, setQ] = useState("");
+  const [filterSubjek, setFilterSubjek] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
-  // subjek helper
+  /* ===== SweetAlert helpers (kecil) ===== */
+  const showLoading = (title = "Memproses...") =>
+    SmallSwal.fire({
+      title,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => SmallSwal.showLoading(),
+    });
+
+  const alertError = (title, text) =>
+    SmallSwal.fire({ icon: "error", title, text, confirmButtonText: "OK" });
+
+  const alertWarn = (title, text) =>
+    SmallSwal.fire({ icon: "warning", title, text, confirmButtonText: "OK" });
+
+  const confirmDialog = (title, text, confirmText = "Ya, lanjut") =>
+    SmallSwal.fire({
+      icon: "question",
+      title,
+      text,
+      showCancelButton: true,
+      confirmButtonText: confirmText,
+      cancelButtonText: "Batal",
+    });
+
+  const toast = (title, icon = "success") => SmallToast.fire({ title, icon });
+
+  /* ===== subjek helper ===== */
   const subjekMap = useMemo(() => {
-    const m = new Map()
-    for (const s of subjekOptions) m.set(String(s.id), s)
-    return m
-  }, [subjekOptions])
-  const subjekLabel = (id) => subjekMap.get(String(id))?.subjek ?? id ?? "-"
+    const m = new Map();
+    for (const s of subjekOptions) m.set(String(s.id), s);
+    return m;
+  }, [subjekOptions]);
+  const subjekLabel = (id) => subjekMap.get(String(id))?.subjek ?? id ?? "-";
 
-  // load data
+  /* ===== load data ===== */
   const load = async () => {
-    setLoading(true)
+    setLoading(true);
     try {
-      const [{ data: helps }, { data: subs }] = await Promise.all([
-        api.get("/help"),
-        api.get("/subjek"),
-      ])
-      setItems(Array.isArray(helps) ? helps : [])
-      setSubjekOptions(Array.isArray(subs) ? subs : [])
+      const [{ data: helps }, { data: subs }] = await Promise.all([api.get("/help"), api.get("/subjek")]);
+      setItems(Array.isArray(helps) ? helps : []);
+      setSubjekOptions(Array.isArray(subs) ? subs : []);
     } catch (e) {
-      console.error("load help failed:", e)
+      const msg = e?.response?.data?.message || e?.message || "Gagal memuat data Help.";
+      await alertError("Gagal Memuat", msg);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
-  useEffect(() => {
-    load()
-  }, [])
+  };
+  useEffect(() => { load(); }, []);
 
-  // ===== CREATE =====
-  const isEmpty = (v) => String(v ?? "").trim() === ""
-  const errNama = touched.nama && isEmpty(form.nama)
-  const errEmail = touched.email && isEmpty(form.email)
-  const errSubjek = touched.subjek_id && isEmpty(form.subjek_id)
-  const errMessage = touched.message && isEmpty(form.message)
-  const baseInput = "h-10 w-full rounded-xl border px-3"
-  const redIf = (cond) => (cond ? " border-rose-400 ring-1 ring-rose-200" : " border-slate-200")
+  /* ===== CREATE ===== */
+  const isEmpty = (v) => String(v ?? "").trim() === "";
+  const baseInput = "h-10 w-full rounded-xl border px-3";
+  const redIf = (cond) => (cond ? " border-rose-400 ring-1 ring-rose-200" : " border-slate-200");
+
+  const errNama = touched.nama && isEmpty(form.nama);
+  const errEmailEmpty = touched.email && isEmpty(form.email);
+  const invalidEmail = touched.email && !isEmpty(form.email) && !isEmail(form.email); // ⬅️ format salah
+  const errSubjek = touched.subjek_id && isEmpty(form.subjek_id);
+  const errMessage = touched.message && isEmpty(form.message);
 
   const submitCreate = async (e) => {
-    e.preventDefault()
-    const { nama, email, subjek_id, message, picture } = form
+    e.preventDefault();
+    const { nama, email, subjek_id, message, picture } = form;
 
-    const missing = isEmpty(nama) || isEmpty(email) || isEmpty(subjek_id) || isEmpty(message)
+    const missing = isEmpty(nama) || isEmpty(email) || isEmpty(subjek_id) || isEmpty(message);
     if (missing) {
-      setTouched({ nama: true, email: true, subjek_id: true, message: true })
-      return
+      setTouched({ nama: true, email: true, subjek_id: true, message: true });
+      await alertWarn("Form belum lengkap", "Nama, Email, Subjek dan Message wajib diisi.");
+      return;
+    }
+    if (!isEmail(String(email).trim())) {
+      setTouched((t) => ({ ...t, email: true }));
+      await alertWarn("Email tidak valid", "Contoh: nama@domain.com");
+      emailRef.current?.focus();
+      return;
     }
 
-    const fd = new FormData()
-    fd.append("nama", nama.trim())
-    fd.append("email", email.trim())
-    fd.append("subjek_id", String(subjek_id))
-    fd.append("message", message.trim())
-    if (picture instanceof File) fd.append("picture", picture)
+    const fd = new FormData();
+    fd.append("nama", nama.trim());
+    fd.append("email", String(email).trim());
+    fd.append("subjek_id", String(subjek_id));
+    fd.append("message", message.trim());
+    if (picture instanceof File) fd.append("picture", picture);
 
     try {
-      await api.post("/help", fd, { headers: { "Content-Type": "multipart/form-data" } })
-      setForm({ nama: "", email: "", subjek_id: "", message: "", picture: null })
-      setTouched({ nama: false, email: false, subjek_id: false, message: false })
-      if (fileRef.current) fileRef.current.value = ""
-      setAddOpen(false)
-      await load()
+      showLoading("Menyimpan tiket...");
+      await api.post("/help", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      SmallSwal.close();
+      setForm({ nama: "", email: "", subjek_id: "", message: "", picture: null });
+      setTouched({ nama: false, email: false, subjek_id: false, message: false });
+      if (fileRef.current) fileRef.current.value = "";
+      setAddOpen(false);
+      await load();
+      await toast("Tiket berhasil dibuat");
     } catch (e2) {
-      console.error("create help failed:", e2)
+      SmallSwal.close();
+      const msg = e2?.response?.data?.message || e2?.message || "Gagal membuat tiket.";
+      await alertError("Gagal", msg);
     }
-  }
+  };
 
-  // ===== DETAIL =====
+  /* ===== DETAIL ===== */
   const openDetail = async (id) => {
     try {
-      const { data } = await api.get(`/help/${id}`)
-      setSelected(data || null)
-      setDetailOpen(true)
+      showLoading("Memuat detail...");
+      const { data } = await api.get(`/help/${id}`);
+      SmallSwal.close();
+      setSelected(data || null);
+      setDetailOpen(true);
     } catch (e) {
-      console.error("openDetail failed:", e)
+      SmallSwal.close();
+      const msg = e?.response?.data?.message || e?.message || "Gagal memuat detail.";
+      await alertError("Gagal", msg);
     }
-  }
+  };
 
-  // ===== DELETE =====
+  /* ===== DELETE ===== */
   const remove = async (id) => {
-    if (!confirm("Hapus tiket ini?")) return
-    try {
-      await api.delete(`/help/${id}`)
-      await load()
-      if (selected?.id === id) {
-        setDetailOpen(false)
-        setSelected(null)
-      }
-    } catch (e) {
-      console.error("remove failed:", e)
-    }
-  }
+    const res = await confirmDialog("Hapus tiket ini?", "Tindakan ini tidak bisa dibatalkan.", "Ya, hapus");
+    if (!res.isConfirmed) return;
 
-  // ===== REPLY =====
+    try {
+      showLoading("Menghapus tiket...");
+      await api.delete(`/help/${id}`);
+      SmallSwal.close();
+      await load();
+      if (selected?.id === id) { setDetailOpen(false); setSelected(null); }
+      await toast("Tiket dihapus");
+    } catch (e) {
+      SmallSwal.close();
+      const msg = e?.response?.data?.message || e?.message || "Gagal menghapus tiket.";
+      await alertError("Gagal", msg);
+    }
+  };
+
+  /* ===== REPLY ===== */
   const openReply = (ticket) => {
-    setReplyFor(ticket)
-    const firstTemplate = ticket?.status || "PENDING"
-    const msg = buildMessageByStatus(firstTemplate, { ticket, reason: "" })
-    setReplyForm({
-      template: firstTemplate,
-      reason: "",
-      message: msg,
-      picture: null,
-      send_email: true, // NEW
-    })
-    if (replyFileRef.current) replyFileRef.current.value = ""
-    setReplyOpen(true)
-  }
+    setReplyFor(ticket);
+    const firstTemplate = ticket?.status || "PENDING";
+    const msg = buildMessageByStatus(firstTemplate, { ticket, reason: "" });
+    setReplyForm({ template: firstTemplate, reason: "", message: msg, picture: null, send_email: true });
+    if (replyFileRef.current) replyFileRef.current.value = "";
+    setReplyOpen(true);
+  };
   const onTemplateChange = (val) => {
     setReplyForm((f) => ({
       ...f,
       template: val,
       message: buildMessageByStatus(val, { ticket: replyFor, reason: f.reason }),
-    }))
-  }
+    }));
+  };
   const onReasonChange = (val) => {
     setReplyForm((f) => ({
       ...f,
       reason: val,
       message: buildMessageByStatus(f.template, { ticket: replyFor, reason: val }),
-    }))
-  }
+    }));
+  };
 
   const submitReply = async (e) => {
-    e.preventDefault()
-    if (!replyFor) return
+    e.preventDefault();
+    if (!replyFor) return;
+
     if (!replyForm.message.trim()) {
-      alert("Reply message wajib diisi")
-      return
+      await alertWarn("Validasi", "Reply message wajib diisi.");
+      return;
     }
 
-    const fd = new FormData()
-    fd.append("message", replyForm.message.trim())
-    fd.append("template", replyForm.template)
-    fd.append("reason", replyForm.reason)
-    fd.append("next_status", replyForm.template)
-    if (replyForm.picture instanceof File) fd.append("picture", replyForm.picture)
-    fd.append("send_email", replyForm.send_email ? "true" : "false") // NEW
+    const fd = new FormData();
+    fd.append("message", replyForm.message.trim());
+    fd.append("template", replyForm.template);
+    fd.append("reason", replyForm.reason);
+    fd.append("next_status", replyForm.template);
+    if (replyForm.picture instanceof File) fd.append("picture", replyForm.picture);
+    fd.append("send_email", replyForm.send_email ? "true" : "false");
 
     try {
-      setReplyBusy(true)
-      await api.post(`/help/${replyFor.id}/replies`, fd, { headers: { "Content-Type": "multipart/form-data" } })
-      await api.put(`/help/${replyFor.id}/status`, { status: replyForm.template })
-      await load()
-      if (selected?.id === replyFor.id) setSelected((s) => (s ? { ...s, status: replyForm.template } : s))
-      setReplyOpen(false)
-      setReplyFor(null)
-      if (replyFileRef.current) replyFileRef.current.value = ""
-      alert("Reply terkirim & status tiket diperbarui.")
+      setReplyBusy(true);
+      showLoading("Mengirim reply...");
+      await api.post(`/help/${replyFor.id}/replies`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      await api.put(`/help/${replyFor.id}/status`, { status: replyForm.template });
+      SmallSwal.close();
+      await load();
+      if (selected?.id === replyFor.id) setSelected((s) => (s ? { ...s, status: replyForm.template } : s));
+      setReplyOpen(false);
+      setReplyFor(null);
+      if (replyFileRef.current) replyFileRef.current.value = "";
+      await toast("Reply terkirim & status diperbarui");
     } catch (e2) {
-      alert(e2?.message || "Gagal mengirim reply")
+      SmallSwal.close();
+      const msg = e2?.response?.data?.message || e2?.message || "Gagal mengirim reply.";
+      await alertError("Gagal", msg);
     } finally {
-      setReplyBusy(false)
+      setReplyBusy(false);
     }
-  }
+  };
 
-  // FILE URL util
-  const FILE_BASE = (import.meta.env.VITE_FILE_BASE || "").replace(/\/+$/, "") + "/"
+  /* ===== FILE URL util ===== */
+  const FILE_BASE = (import.meta.env.VITE_FILE_BASE || "").replace(/\/+$/, "") + "/";
   const fileUrl = (p) => {
-    if (!p) return ""
-    if (/^https?:\/\//i.test(p)) return p
-    const cleaned = String(p).replace(/\\/g, "/").replace(/^\/+/, "")
-    const noOutput = cleaned.replace(/^output\//, "")
-    return FILE_BASE + noOutput
-  }
+    if (!p) return "";
+    if (/^https?:\/\//i.test(p)) return p;
+    const cleaned = String(p).replace(/\\/g, "/").replace(/^\/+/, "");
+    const noOutput = cleaned.replace(/^output\//, "");
+    return FILE_BASE + noOutput;
+  };
 
-  // ===== SEARCH + FILTER + PAGINATION (client) =====
+  /* ===== FILTER + PAGINATION (client) ===== */
   const filtered = useMemo(() => {
-    const s = (q || "").trim().toLowerCase()
-    let list = items
+    const s = (q || "").trim().toLowerCase();
+    let list = items;
 
-    if (filterSubjek) list = list.filter((i) => String(i.subjek_id) === String(filterSubjek))
-    if (filterStatus) list = list.filter((i) => String(i.status) === String(filterStatus))
+    if (filterSubjek) list = list.filter((i) => String(i.subjek_id) === String(filterSubjek));
+    if (filterStatus) list = list.filter((i) => String(i.status) === String(filterStatus));
 
     if (s) {
       list = list.filter(
@@ -253,18 +301,16 @@ export default function HelpPage() {
           (i.email || "").toLowerCase().includes(s) ||
           (subjekLabel(i.subjek_id) || "").toLowerCase().includes(s) ||
           (i.status || "").toLowerCase().includes(s)
-      )
+      );
     }
-    return list
-  }, [items, q, filterSubjek, filterStatus, subjekOptions])
+    return list;
+  }, [items, q, filterSubjek, filterStatus, subjekOptions]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const curPage = Math.min(page, totalPages)
-  const start = (curPage - 1) * pageSize
-  const displayRows = filtered.slice(start, start + pageSize)
-  useEffect(() => {
-    setPage(1)
-  }, [q, pageSize, filterSubjek, filterStatus])
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const curPage = Math.min(page, totalPages);
+  const start = (curPage - 1) * pageSize;
+  const displayRows = filtered.slice(start, start + pageSize);
+  useEffect(() => { setPage(1); }, [q, pageSize, filterSubjek, filterStatus]);
 
   const badgeClass = (status) =>
     "inline-flex items-center px-2 py-0.5 rounded-full text-xs border " +
@@ -274,7 +320,7 @@ export default function HelpPage() {
       ? "bg-indigo-50 text-indigo-700 border-indigo-200"
       : status === "CANCELLED"
       ? "bg-amber-50 text-amber-700 border-amber-200"
-      : "bg-slate-100 text-slate-700 border-slate-200")
+      : "bg-slate-100 text-slate-700 border-slate-200");
 
   return (
     <section className="max-w-screen-2xl mx-auto w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 lg:py-6">
@@ -290,9 +336,7 @@ export default function HelpPage() {
           >
             <option value="">Semua Subjek</option>
             {subjekOptions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.subjek}
-              </option>
+              <option key={s.id} value={s.id}>{s.subjek}</option>
             ))}
           </select>
 
@@ -304,9 +348,7 @@ export default function HelpPage() {
           >
             <option value="">Semua Status</option>
             {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
 
@@ -324,10 +366,10 @@ export default function HelpPage() {
 
             <button
               onClick={() => {
-                setAddOpen(true)
-                setForm({ nama: "", email: "", subjek_id: "", message: "", picture: null })
-                setTouched({ nama: false, email: false, subjek_id: false, message: false })
-                if (fileRef.current) fileRef.current.value = ""
+                setAddOpen(true);
+                setForm({ nama: "", email: "", subjek_id: "", message: "", picture: null });
+                setTouched({ nama: false, email: false, subjek_id: false, message: false });
+                if (fileRef.current) fileRef.current.value = "";
               }}
               className="h-10 rounded-xl bg-blue-600 px-4 text-white text-sm md:text-base shadow-sm transition hover:bg-blue-700 active:translate-y-px"
             >
@@ -354,15 +396,9 @@ export default function HelpPage() {
                     <span className={`mt-2 ${badgeClass(i.status)}`}>{i.status}</span>
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
-                    <button onClick={() => openDetail(i.id)} className="rounded-lg bg-slate-200 px-2 py-1 text-[11px] text-slate-800 hover:bg-slate-300">
-                      Detail
-                    </button>
-                    <button onClick={() => openReply(i)} className="rounded-lg bg-amber-500 px-2 py-1 text-[11px] text-white hover:bg-amber-600">
-                      Reply
-                    </button>
-                    <button onClick={() => remove(i.id)} className="rounded-lg bg-rose-600 px-2 py-1 text-[11px] text-white hover:bg-rose-700">
-                      Hapus
-                    </button>
+                    <button onClick={() => openDetail(i.id)} className="rounded-lg bg-slate-200 px-2 py-1 text-[11px] text-slate-800 hover:bg-slate-300">Detail</button>
+                    <button onClick={() => openReply(i)} className="rounded-lg bg-amber-500 px-2 py-1 text-[11px] text-white hover:bg-amber-600">Reply</button>
+                    <button onClick={() => remove(i.id)} className="rounded-lg bg-rose-600 px-2 py-1 text-[11px] text-white hover:bg-rose-700">Hapus</button>
                   </div>
                 </div>
                 <p className="mt-2 text-sm text-slate-800 whitespace-pre-line">{i.message}</p>
@@ -399,24 +435,16 @@ export default function HelpPage() {
                     <td className="px-4 py-3 text-slate-700 whitespace-normal break-words">{i.nama}</td>
                     <td className="px-4 py-3 text-slate-700 whitespace-normal break-words">{i.email}</td>
                     <td className="px-4 py-3 text-slate-800">
-                      <div className="truncate" title={subjekLabel(i.subjek_id)}>
-                        {subjekLabel(i.subjek_id)}
-                      </div>
+                      <div className="truncate" title={subjekLabel(i.subjek_id)}>{subjekLabel(i.subjek_id)}</div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={badgeClass(i.status)}>{i.status}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <button onClick={() => openDetail(i.id)} className="rounded-xl bg-slate-200 px-3 py-1.5 text-slate-800 hover:bg-slate-300">
-                          Detail
-                        </button>
-                        <button onClick={() => openReply(i)} className="rounded-xl bg-amber-500 px-3 py-1.5 text-white hover:bg-amber-600">
-                          Reply
-                        </button>
-                        <button onClick={() => remove(i.id)} className="rounded-xl bg-rose-600 px-3 py-1.5 text-white hover:bg-rose-700">
-                          Hapus
-                        </button>
+                        <button onClick={() => openDetail(i.id)} className="rounded-xl bg-slate-200 px-3 py-1.5 text-slate-800 hover:bg-slate-300">Detail</button>
+                        <button onClick={() => openReply(i)} className="rounded-xl bg-amber-500 px-3 py-1.5 text-white hover:bg-amber-600">Reply</button>
+                        <button onClick={() => remove(i.id)} className="rounded-xl bg-rose-600 px-3 py-1.5 text-white hover:bg-rose-700">Hapus</button>
                       </div>
                     </td>
                   </tr>
@@ -441,28 +469,14 @@ export default function HelpPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
-            {[5, 10, 20, 50].map((n) => (
-              <option key={n} value={n}>
-                {n}/hal
-              </option>
-            ))}
+            {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}/hal</option>)}
           </select>
           <div className="flex items-center gap-1">
-            <button onClick={() => setPage(1)} disabled={curPage === 1} className="h-9 min-w-9 rounded-lg border border-slate-200 px-2 text-sm disabled:opacity-40">
-              «
-            </button>
-            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={curPage === 1} className="h-9 min-w-9 rounded-lg border border-slate-200 px-2 text-sm disabled:opacity-40">
-              ‹
-            </button>
-            <span className="px-2 text-sm">
-              Hal <span className="font-medium">{curPage}</span> / {totalPages}
-            </span>
-            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={curPage === totalPages} className="h-9 min-w-9 rounded-lg border border-slate-200 px-2 text-sm disabled:opacity-40">
-              ›
-            </button>
-            <button onClick={() => setPage(totalPages)} disabled={curPage === totalPages} className="h-9 min-w-9 rounded-lg border border-slate-200 px-2 text-sm disabled:opacity-40">
-              »
-            </button>
+            <button onClick={() => setPage(1)} disabled={curPage === 1} className="h-9 min-w-9 rounded-lg border border-slate-200 px-2 text-sm disabled:opacity-40">«</button>
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={curPage === 1} className="h-9 min-w-9 rounded-lg border border-slate-200 px-2 text-sm disabled:opacity-40">‹</button>
+            <span className="px-2 text-sm">Hal <span className="font-medium">{curPage}</span> / {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={curPage === totalPages} className="h-9 min-w-9 rounded-lg border border-slate-200 px-2 text-sm disabled:opacity-40">›</button>
+            <button onClick={() => setPage(totalPages)} disabled={curPage === totalPages} className="h-9 min-w-9 rounded-lg border border-slate-200 px-2 text-sm disabled:opacity-40">»</button>
           </div>
         </div>
       </div>
@@ -470,13 +484,12 @@ export default function HelpPage() {
       {/* ========= MODAL TAMBAH ========= */}
       {addOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-3 sm:p-4">
-          <form onSubmit={submitCreate} className="w-full max-w-sm sm:max-w-md rounded-2xl bg-white shadow-xl">
+          {/* noValidate untuk matikan validation native */}
+          <form onSubmit={submitCreate} noValidate className="w-full max-w-sm sm:max-w-md rounded-2xl bg-white shadow-xl">
             <div className="max-h-[80vh] overflow-y-auto p-4 sm:p-5">
               <div className="mb-3 sm:mb-4 flex items-start justify-between">
                 <h3 className="text-base sm:text-lg font-semibold">Tambah tiket</h3>
-                <button type="button" onClick={() => setAddOpen(false)} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">
-                  ×
-                </button>
+                <button type="button" onClick={() => setAddOpen(false)} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">×</button>
               </div>
 
               <label className="mb-1 block text-xs font-medium text-slate-600">Nama</label>
@@ -491,14 +504,18 @@ export default function HelpPage() {
 
               <label className="mt-3 mb-1 block text-xs font-medium text-slate-600">Email</label>
               <input
-                type="email"
+                ref={emailRef}
+                type="text" // supaya tidak muncul tooltip native
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 onBlur={() => markTouched("email")}
-                className={baseInput + redIf(errEmail)}
+                className={baseInput + redIf(errEmailEmpty || invalidEmail)}
                 placeholder="Email *"
               />
-              {errEmail && <p className="mt-1 text-xs text-rose-600">Email wajib diisi.</p>}
+              {errEmailEmpty && <p className="mt-1 text-xs text-rose-600">Email wajib diisi.</p>}
+              {!errEmailEmpty && invalidEmail && (
+                <p className="mt-1 text-xs text-rose-600">Email tidak valid. Contoh: nama@domain.com</p>
+              )}
 
               <label className="mt-3 mb-1 block text-xs font-medium text-slate-600">Subjek</label>
               <select
@@ -508,11 +525,7 @@ export default function HelpPage() {
                 className={baseInput + redIf(errSubjek)}
               >
                 <option value="">— Pilih subjek —</option>
-                {subjekOptions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.subjek}
-                  </option>
-                ))}
+                {subjekOptions.map((s) => <option key={s.id} value={s.id}>{s.subjek}</option>)}
               </select>
               {errSubjek && <p className="mt-1 text-xs text-rose-600">Subjek wajib dipilih.</p>}
 
@@ -531,7 +544,7 @@ export default function HelpPage() {
                 onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
                 onBlur={() => markTouched("message")}
                 className={
-                  "min-h-[96px] w-full rounded-xl border px-3 py-2" +
+                  "min-h[96px] min-h-[96px] w-full rounded-xl border px-3 py-2" +
                   (errMessage ? " border-rose-400 ring-1 ring-rose-200" : " border-slate-200")
                 }
                 placeholder="Message *"
@@ -539,12 +552,8 @@ export default function HelpPage() {
               {errMessage && <p className="mt-1 text-xs text-rose-600">Message wajib diisi.</p>}
 
               <div className="mt-4 sm:mt-5 flex justify-end gap-2">
-                <button type="button" onClick={() => setAddOpen(false)} className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-red-700 hover:bg-red-100">
-                  Batal
-                </button>
-                <button type="submit" className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-                  Simpan
-                </button>
+                <button type="button" onClick={() => setAddOpen(false)} className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-red-700 hover:bg-red-100">Batal</button>
+                <button type="submit" className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Simpan</button>
               </div>
             </div>
           </form>
@@ -558,9 +567,7 @@ export default function HelpPage() {
             <div className="max-h-[80vh] overflow-y-auto p-5">
               <div className="mb-3 flex items-start justify-between">
                 <h3 className="text-lg font-semibold">Ticket #{selected.id}</h3>
-                <button onClick={() => { setDetailOpen(false); setSelected(null) }} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">
-                  ×
-                </button>
+                <button onClick={() => { setDetailOpen(false); setSelected(null); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">×</button>
               </div>
 
               <div className="space-y-2 text-sm">
@@ -587,9 +594,7 @@ export default function HelpPage() {
               </div>
 
               <div className="mt-5 flex justify-end">
-                <button onClick={() => { setDetailOpen(false); setSelected(null) }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 hover:bg-slate-50">
-                  Tutup
-                </button>
+                <button onClick={() => { setDetailOpen(false); setSelected(null); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 hover:bg-slate-50">Tutup</button>
               </div>
             </div>
           </div>
@@ -603,18 +608,14 @@ export default function HelpPage() {
             <div className="max-h-[80vh] overflow-y-auto p-5">
               <div className="mb-3 flex items-start justify-between">
                 <h3 className="text-lg font-semibold">Reply Ticket #{replyFor?.id}</h3>
-                <button type="button" onClick={() => { setReplyOpen(false); setReplyFor(null) }} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">
-                  ×
-                </button>
+                <button type="button" onClick={() => { setReplyOpen(false); setReplyFor(null); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">×</button>
               </div>
 
               <div className="grid gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-600">Template</label>
                   <select value={replyForm.template} onChange={(e) => onTemplateChange(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3">
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
+                    {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
 
@@ -639,7 +640,6 @@ export default function HelpPage() {
                   />
                 </div>
 
-                {/* NEW: ceklis kirim email */}
                 <label className="flex items-center gap-2 text-sm select-none">
                   <input
                     type="checkbox"
@@ -652,9 +652,7 @@ export default function HelpPage() {
               </div>
 
               <div className="mt-5 flex justify-end gap-2">
-                <button type="button" onClick={() => { setReplyOpen(false); setReplyFor(null) }} className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-red-700 hover:bg-red-100">
-                  Batal
-                </button>
+                <button type="button" onClick={() => { setReplyOpen(false); setReplyFor(null); }} className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-red-700 hover:bg-red-100">Batal</button>
                 <button type="submit" disabled={replyBusy} className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-40">
                   {replyBusy ? "Mengirim…" : "Kirim Reply"}
                 </button>
@@ -664,5 +662,5 @@ export default function HelpPage() {
         </div>
       )}
     </section>
-  )
+  );
 }

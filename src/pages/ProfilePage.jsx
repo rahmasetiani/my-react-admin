@@ -1,6 +1,8 @@
 // src/pages/ProfilePage.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "../lib/api";
+import { SmallSwal, SmallToast } from "../lib/alerts";
+import { isEmail } from "../lib/validator";
 
 export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
@@ -29,13 +31,33 @@ export default function ProfilePage() {
   const mark = (k) => setTouched((t) => ({ ...t, [k]: true }));
   const isEmpty = (v) => String(v ?? "").trim() === "";
   const errNama = touched.nama_lengkap && isEmpty(form.nama_lengkap);
-  const errEmail = touched.email && isEmpty(form.email);
+  const errEmailEmpty = touched.email && isEmpty(form.email);
+  const invalidEmail = touched.email && !isEmpty(form.email) && !isEmail(form.email);
   const errPwd = pwd.new_password && pwd.new_password !== pwd.confirm;
 
+  const emailRef = useRef(null);
+
+  // Styles
   const baseInput =
     "h-11 w-full rounded-xl border px-3 outline-none transition disabled:bg-slate-50";
   const ringOk = " border-slate-200 focus:ring-2 ring-primary-100";
   const ringErr = " border-rose-400 ring-1 ring-rose-200";
+
+  // ==== SweetAlert helpers ====
+  const showLoading = (title = "Memproses...") =>
+    SmallSwal.fire({
+      title,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => SmallSwal.showLoading(),
+    });
+  const alertError = (title, text) =>
+    SmallSwal.fire({ icon: "error", title, text, confirmButtonText: "OK" });
+  const alertWarn = (title, text) =>
+    SmallSwal.fire({ icon: "warning", title, text, confirmButtonText: "OK" });
+  const toast = (title, icon = "success") =>
+    SmallToast.fire({ title, icon });
 
   // Normalisasi respons backend
   const normalizeAccount = (raw = {}) => {
@@ -59,6 +81,7 @@ export default function ProfilePage() {
     (async () => {
       try {
         setLoading(true);
+        showLoading("Memuat profil...");
         const uid = localStorage.getItem("auth_user_id");
         let data = null;
         if (uid) data = (await api.get(`/accounts/${uid}`))?.data || null;
@@ -79,8 +102,10 @@ export default function ProfilePage() {
           created_at: n.created_at,
           updated_at: n.updated_at,
         });
+        SmallSwal.close();
       } catch (e) {
-        console.error("load profile failed:", e);
+        SmallSwal.close();
+        await alertError("Gagal Memuat", e?.response?.data?.message || e?.message || "Tidak dapat memuat profil.");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -122,33 +147,53 @@ export default function ProfilePage() {
     e.preventDefault();
     if (!accountId) return;
 
+    // Validasi kosong
     if (isEmpty(form.nama_lengkap) || isEmpty(form.email)) {
       setTouched({ nama_lengkap: true, email: true });
+      await alertWarn("Form belum lengkap", "Nama lengkap dan Email wajib diisi.");
       return;
     }
-    if (errPwd) return;
+
+    // Validasi email format
+    if (!isEmail(String(form.email).trim())) {
+      setTouched((t) => ({ ...t, email: true }));
+      await alertWarn("Email tidak valid", "Contoh yang benar: nama@domain.com");
+      emailRef.current?.focus();
+      return;
+    }
+
+    // Validasi password mismatch
+    if (errPwd) {
+      await alertWarn("Konfirmasi tidak cocok", "Konfirmasi password harus sama dengan password baru.");
+      return;
+    }
 
     const payload = buildPayload(form, pwd);
 
     try {
       setSaving(true);
+      showLoading("Menyimpan profil...");
       await api.put(`/accounts/${accountId}`, payload, {
         headers: { "Content-Type": "application/json" },
       });
 
-      alert("Profil berhasil diperbarui.");
+      SmallSwal.close();
+      await toast("Profil berhasil diperbarui");
 
       // Refresh updated_at dari server
       try {
         const r = await api.get(`/accounts/${accountId}`);
         const n = normalizeAccount(r?.data || {});
         setForm((f) => ({ ...f, updated_at: n.updated_at }));
-      } catch { /* empty */ }
+      } catch {
+        // jika gagal refresh, diamkan
+      }
       setPwd({ new_password: "", confirm: "" });
       setShowPwd(false);
       setShowConfirm(false);
     } catch (e2) {
-      alert(e2?.message || "Gagal memperbarui profil");
+      SmallSwal.close();
+      await alertError("Gagal Menyimpan", e2?.response?.data?.message || e2?.message || "Tidak dapat menyimpan profil.");
     } finally {
       setSaving(false);
     }
@@ -170,6 +215,7 @@ export default function ProfilePage() {
       ) : (
         <form
           onSubmit={submit}
+          noValidate
           className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 md:p-8 shadow-md"
         >
           {/* Meta */}
@@ -207,15 +253,19 @@ export default function ProfilePage() {
               Email
             </label>
             <input
-              type="email"
+              ref={emailRef}
+              type="text" // hindari tooltip native, validasi manual
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               onBlur={() => mark("email")}
-              className={baseInput + (errEmail ? ringErr : ringOk)}
-              placeholder="Email *"
+              className={baseInput + ((errEmailEmpty || invalidEmail) ? ringErr : ringOk)}
+              placeholder="nama@domain.com *"
             />
-            {errEmail && (
+            {errEmailEmpty && (
               <p className="mt-1 text-xs text-rose-600">Email wajib diisi.</p>
+            )}
+            {!errEmailEmpty && invalidEmail && (
+              <p className="mt-1 text-xs text-rose-600">Email tidak valid. Contoh: nama@domain.com</p>
             )}
           </div>
 

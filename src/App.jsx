@@ -1,27 +1,48 @@
+// src/App.jsx
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes, useNavigate } from "react-router-dom";
+import { SmallSwal, SmallToast } from "./lib/alerts"; // ← perbaiki path
 import { api } from "./lib/api";
 import HealthPage from "./pages/HealthPage.jsx";
 import SubjekPage from "./pages/SubjekPage.jsx";
 import HelpPage from "./pages/HelpPage.jsx";
 import DemoPage from "./pages/DemoPage.jsx";
-import ProfilePage from "./pages/ProfilePage.jsx"; // ⬅️ tambahkan
+import ProfilePage from "./pages/ProfilePage.jsx";
 
-
-const LOGO_URL = "/logo.png"; // /public/logo.png
+const LOGO_URL = "/logo.png";
 
 export default function App() {
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [drawerOpen, setDrawerOpen] = useState(false); // mobile/tablet drawer
-  const [mini, setMini] = useState(false);             // desktop mini sidebar
-  const [profileOpen, setProfileOpen] = useState(false);      // header dropdown
-  const [sideProfileOpen, setSideProfileOpen] = useState(false); // sidebar dropdown (mobile)
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mini, setMini] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [sideProfileOpen, setSideProfileOpen] = useState(false);
   const navigate = useNavigate();
 
   const isDesktop = useMedia("(min-width: 1025px)");
   const isMobile  = useMedia("(max-width: 640px)");
+
+  /* ---------- SweetAlert helpers (pakai mixin kecil) ---------- */
+  const toast = (title, icon = "success") =>
+    SmallToast.fire({ title, icon });
+
+  const alertError = (title, text) =>
+    SmallSwal.fire({ icon: "error", title, text, confirmButtonText: "OK" });
+
+  const alertInfo = (title, text) =>
+    SmallSwal.fire({ icon: "info", title, text, confirmButtonText: "OK" });
+
+  const confirmDialog = (title, text, confirmText = "OK") =>
+    SmallSwal.fire({
+      icon: "question",
+      title,
+      text,
+      showCancelButton: true,
+      confirmButtonText: confirmText,
+      cancelButtonText: "Batal",
+    });
 
   /* ---------- Global CSS ---------- */
   useEffect(() => {
@@ -30,48 +51,35 @@ export default function App() {
       const s = document.createElement("style");
       s.id = id;
       s.innerHTML = `
-        :root{
-          --header:#0b63f3; --sidebar:#0b63f3; --ring:#93c5fd;
-          --text:#0b1220; --muted:#4b5563; --bg:#f6f8fc;
-        }
+        :root{ --header:#0b63f3; --sidebar:#0b63f3; --ring:#93c5fd; --text:#0b1220; --muted:#4b5563; --bg:#f6f8fc; }
         @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
         .layout{display:grid;min-height:100vh;background:var(--bg);grid-template-columns:72px 1fr;font-family:Inter, system-ui, sans-serif}
         .main{display:grid;grid-template-rows:auto 1fr;min-width:0}
         .header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--header);position:sticky;top:0;z-index:10}
-
         .sidebar{background:var(--sidebar);color:#eaf2ff;position:sticky;top:0;align-self:start;height:100dvh;display:flex;flex-direction:column}
-        .sidebar.expanded{width:260px}
-        .sidebar.collapsed{width:72px}
-
+        .sidebar.expanded{width:260px}.sidebar.collapsed{width:72px}
         .side-brand{display:flex;align-items:center;gap:10px;padding:14px 12px;border-bottom:1px solid rgba(255,255,255,.15)}
         .brand-title{color:#fff;font-weight:800;letter-spacing:.2px;font-size:16px;line-height:1}
         .logo{width:36px;height:36px;border-radius:10px;object-fit:cover;display:block}
-
         .side-ctrl{padding:8px;border-bottom:1px solid rgba(255,255,255,.15);display:flex;gap:8px}
         .chip{display:grid;place-items:center;min-width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.25);color:#fff;cursor:pointer}
         .chip:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
-
         .side-nav{padding:8px;flex:1;overflow:auto}
-        .side-nav .link{font-size:15px} /* font sidebar dibesarkan */
-
+        .side-nav .link{font-size:15px}
         .hamburger{width:38px;height:38px;border-radius:12px;background:#fff;border:1px solid #dbeafe;color:#0b63f3;font-weight:800;cursor:pointer}
         .profile-btn{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:6px 8px;cursor:pointer}
         .profile-dd{position:absolute;right:0;margin-top:8px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);min-width:200px;padding:6px;z-index:20}
         .drop-item{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:14px;color:#111827}
+        .drop-item:hover{background:#f3f4f6}
         .drop-sep{border:0;border-top:1px solid #e5e7eb;margin:6px 0}
         .skeleton{width:220px;height:44px;border-radius:12px;background:linear-gradient(90deg,#ffffff55 25%,#ffffff99 37%,#ffffff55 63%);background-size:400% 100%;animation:shimmer 1.2s infinite}
-
         .dim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:30}
         .focusable:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
-
-        /* Drawer (<=1024px) */
         @media (max-width:1024px){
           .layout{grid-template-columns:1fr}
           .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:40;transform:translateX(-100%);transition:transform .2s ease-out;width:260px}
           .sidebar.drawer-open{transform:translateX(0)}
         }
-        /* Desktop columns */
         @media (min-width:1025px){
           .layout.with-sidebar-expanded{grid-template-columns:260px 1fr}
           .layout.with-sidebar-collapsed{grid-template-columns:72px 1fr}
@@ -96,7 +104,9 @@ export default function App() {
         }
         if (mounted) setMe(data);
       } catch (e) {
-        if (mounted) setError(e.message || "Gagal memuat profil");
+        const msg = e?.response?.data?.message || e?.message || "Gagal memuat profil.";
+        if (mounted) setError(msg);
+        alertError("Gagal Memuat Data", msg);
       } finally { if (mounted) setLoading(false); }
     })();
     return () => { mounted = false; };
@@ -112,18 +122,15 @@ export default function App() {
   }, []);
   useEffect(() => { if (isDesktop) setDrawerOpen(false); }, [isDesktop]);
 
-  const logout = () => {
-    if (!window.confirm("Apakah Anda yakin ingin keluar?")) {
-      console.log("Logout dibatalkan");
-      return;
-    }
-    console.log("Logout dikonfirmasi");
+  const logout = async () => {
+    const res = await confirmDialog("Keluar dari dashboard?", "Anda akan kembali ke halaman login.", "Logout");
+    if (!res.isConfirmed) return;
 
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_user_id");
+    await toast("Berhasil logout", "success");
     navigate("/login", { replace: true });
   };
-
 
   /* ---------- Layout state ---------- */
   const layoutClass = useMemo(() => {
@@ -131,7 +138,6 @@ export default function App() {
     return `layout ${mini ? "with-sidebar-collapsed" : "with-sidebar-expanded"}`;
   }, [isDesktop, mini]);
 
-  // Buka/tutup via logo atau ikon menu
   const toggleByIcon = () => {
     if (isDesktop) setMini(v => !v);
     else setDrawerOpen(true);
@@ -200,7 +206,12 @@ export default function App() {
                 >
                   Profil
                 </div>
-                <div className="drop-item" onClick={() => setSideProfileOpen(false)}>Pengaturan</div>
+                <div
+                  className="drop-item"
+                  onClick={() => alertInfo("Pengaturan", "Halaman pengaturan belum tersedia.")}
+                >
+                  Pengaturan
+                </div>
                 <hr className="drop-sep" />
                 <div className="drop-item" style={{ color: "#ef4444" }} onClick={logout}>Logout</div>
               </div>
@@ -208,34 +219,28 @@ export default function App() {
           </div>
         )}
 
-        {/* ====== CONTROL BAR DI ATAS NAV (⇠ pindahan dari bawah) ====== */}
         {/* NAV */}
         <nav className="side-nav">
           <SideLink to="/"      icon="🏠" label="Dashboard" end  mini={isDesktop && mini} onIconClick={toggleByIcon} onNavigate={() => { setDrawerOpen(false); setSideProfileOpen(false); }} />
           <SideLink to="/subjek" icon="🗂️" label="Subjek"         mini={isDesktop && mini} onIconClick={toggleByIcon} onNavigate={() => { setDrawerOpen(false); setSideProfileOpen(false); }} />
           <SideLink to="/help"   icon="💬" label="Help"           mini={isDesktop && mini} onIconClick={toggleByIcon} onNavigate={() => { setDrawerOpen(false); setSideProfileOpen(false); }} />
           <SideLink to="/demo"   icon="🎥" label="Demo"           mini={isDesktop && mini} onIconClick={toggleByIcon} onNavigate={() => { setDrawerOpen(false); setSideProfileOpen(false); }} />
-        </nav> 
-<div
-  style={{
-    marginTop: "20px",        // jarak dari menu terakhir ke tombol
-    marginBottom: "100px",     // jarak dari bawah layar (biar ga nempel banget)
-    display: "flex",
-    justifyContent: "center",
-  }}
->
-  <button
-    className="chip"
-    onClick={() => (isDesktop ? setMini(v => !v) : setDrawerOpen(false))}
-    title={isDesktop ? (mini ? "Perbesar" : "Perkecil") : "Tutup"}
-    aria-label={isDesktop ? (mini ? "Perbesar" : "Perkecil") : "Tutup"}
-  >
-    {isDesktop ? (mini ? "→" : "←") : "✕"}
-  </button>
-</div>
+        </nav>
 
-   
+        <div
+          style={{ marginTop: "20px", marginBottom: "100px", display: "flex", justifyContent: "center" }}
+        >
+          <button
+            className="chip"
+            onClick={() => (isDesktop ? setMini(v => !v) : setDrawerOpen(false))}
+            title={isDesktop ? (mini ? "Perbesar" : "Perkecil") : "Tutup"}
+            aria-label={isDesktop ? (mini ? "Perbesar" : "Perkecil") : "Tutup"}
+          >
+            {isDesktop ? (mini ? "→" : "←") : "✕"}
+          </button>
+        </div>
       </aside>
+
       {/* MAIN */}
       <div className="main">
         <header className="header">
@@ -256,11 +261,10 @@ export default function App() {
               aria-label="Beranda"
               className="focusable"
               style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
-            >
-            </button>
+            />
           </div>
 
-          {/* (Desktop) Profil di header; (Mobile) pindah ke sidebar */}
+          {/* (Desktop) Profil di header */}
           {isDesktop && (
             <div style={{ position: "relative" }}>
               {loading ? (
@@ -279,33 +283,33 @@ export default function App() {
               )}
 
               {profileOpen && (
-  <div className="profile-dd" role="menu">
-    <div
-      className="drop-item"
-      onClick={() => {
-        setProfileOpen(false);
-        navigate("/profile");
-      }}
-    >
-      Profil
-    </div>
-    <hr className="drop-sep" />
-    <div className="drop-item" style={{ color: "#ef4444" }} onClick={logout}>Logout</div>
-  </div>
-)}
+                <div className="profile-dd" role="menu">
+                  <div
+                    className="drop-item"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      navigate("/profile");
+                    }}
+                  >
+                    Profil
+                  </div>
+                  <hr className="drop-sep" />
+                  <div className="drop-item" style={{ color: "#ef4444" }} onClick={logout}>Logout</div>
+                </div>
+              )}
             </div>
           )}
         </header>
 
         {/* CONTENT */}
         <main style={{ padding: isMobile ? 12 : 16 }}>
-          {error && <p style={{ color: "crimson" }}>{error}</p>}
+          {error && <div style={{ color: "crimson", marginBottom: 8 }}>{error}</div>}
           <Routes>
             <Route path="/" element={<HealthPage />} />
             <Route path="/subjek" element={<SubjekPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/demo" element={<DemoPage />} />
-            <Route path="/profile" element={<ProfilePage />} /> {/* ⬅️ baru */}
+            <Route path="/profile" element={<ProfilePage />} />
           </Routes>
         </main>
       </div>
@@ -337,7 +341,6 @@ function SideLink({ to, icon, label, end, mini, onNavigate, onIconClick }) {
         onMouseLeave={() => setHover(false)}
         title={mini ? label : undefined}
       >
-        {/* Klik ikon juga toggle mini/expand atau buka drawer */}
         <span
           style={{ width: 20, textAlign: "center", cursor: "pointer" }}
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onIconClick?.(); }}
@@ -365,7 +368,7 @@ function SideLink({ to, icon, label, end, mini, onNavigate, onIconClick }) {
 }
 
 function Avatar({ name = "U", src }) {
-  const initials = name.split(" ").map(s => s[0]).join("").toUpperCase().slice(0, 2);
+  const initials = name.split(" ").map(s => s?.[0]).join("").toUpperCase().slice(0, 2) || "U";
   return src ? (
     <img
       src={src}
