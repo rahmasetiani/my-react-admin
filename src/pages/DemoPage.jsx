@@ -634,13 +634,28 @@ export default function DemoPage() {
                     <input type="time" value={replyForm.prefered_time} onChange={(e) => updateReplyForm({ prefered_time: e.target.value })} className="h-10 w-full rounded-xl border border-slate-200 px-3" />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="mb-1 block text-xs font-medium text-slate-600">Lokasi / Link</label>
-                    <input value={replyForm.location} onChange={(e) => updateReplyForm({ location: e.target.value })} className="h-10 w-full rounded-xl border border-slate-200 px-3" />
-                  </div>
-                  <label className="flex items-center gap-2 text-sm sm:col-span-2 select-none">
-                    <input type="checkbox" checked={replyForm.send_email} onChange={(e) => setReplyForm((f) => ({ ...f, send_email: e.target.checked }))} />
-                    Kirim Email ke pemohon
-                  </label>
+  <label className="mb-1 block text-xs font-medium text-slate-600">Lokasi / Link</label>
+
+  <div className="flex gap-2">
+    <input
+      value={replyForm.location}
+      onChange={(e) => updateReplyForm({ location: e.target.value })}
+      className="h-10 w-full rounded-xl border border-slate-200 px-3"
+      placeholder="https://meet.google.com/..."
+    />
+    <button
+      type="button"
+      onClick={() => updateReplyForm({ location: "https://meet.google.com/new" })}
+      className="h-10 shrink-0 rounded-xl border border-slate-200 bg-white px-3 hover:bg-slate-50"
+      title="Gunakan link /new (membuat ruang saat diklik)"
+    >
+      Use /new
+    </button>
+  </div>
+  <p className="mt-1 text-[11px] text-slate-500">
+    Catatan: <code>/new</code> membuat ruang baru saat dibuka; tidak bisa di-pre-generate & disimpan otomatis.
+  </p>
+</div>
                 </div>
               </div>
 

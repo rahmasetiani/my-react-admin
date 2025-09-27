@@ -489,8 +489,13 @@ export default function HelpPage() {
             <div className="max-h-[80vh] overflow-y-auto p-4 sm:p-5">
               <div className="mb-3 sm:mb-4 flex items-start justify-between">
                 <h3 className="text-base sm:text-lg font-semibold">Tambah tiket</h3>
-                <button type="button" onClick={() => setAddOpen(false)} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">×</button>
-              </div>
+<button
+  type="button"
+  onClick={() => setAddOpen(false)}
+  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600"
+>
+  ×
+</button>              </div>
 
               <label className="mb-1 block text-xs font-medium text-slate-600">Nama</label>
               <input
